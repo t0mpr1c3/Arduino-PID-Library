@@ -23,17 +23,18 @@ PID::PID(double* Input, double* Output, double* Setpoint,
 	PID::SetOutputLimits(0, 255);				//default output limit corresponds to 
 												//the arduino pwm limits
 
-    SampleTime = 100;							//default Controller Sample Time is 0.1 seconds
-
-    PID::SetControllerDirection(ControllerDirection);
-    PID::SetTunings(Kp, Ki, Kd);
-
-    lastTime = millis()-SampleTime;				
-    inAuto = false;
-    myOutput = Output;
-    myInput = Input;
-    mySetpoint = Setpoint;
-		
+	SampleTime = 100;							//default Controller Sample Time is 0.1 seconds
+	
+	PID::SetControllerDirection(ControllerDirection);
+	PID::SetTunings(Kp, Ki, Kd);
+	
+	lastTime = millis()-SampleTime;				
+	inAuto = false;
+	myOutput = Output;
+	myInput = Input;
+	mySetpoint = Setpoint;
+	dither = 0;
+	randomSeed( 0 );
 }
  
  
@@ -44,30 +45,40 @@ PID::PID(double* Input, double* Output, double* Setpoint,
  **********************************************************************************/ 
 void PID::Compute()
 {
-   if(!inAuto) return;
-   unsigned long now = millis();
-   unsigned long timeChange = (now - lastTime);
-   if(timeChange>=SampleTime)
-   {
-      /*Compute all the working error variables*/
-	  double input = *myInput;
-      double error = *mySetpoint - input;
-      ITerm+= (ki * error);
-      if(ITerm > outMax) ITerm= outMax;
-      else if(ITerm < outMin) ITerm= outMin;
-      double dInput = (input - lastInput);
- 
-      /*Compute PID Output*/
-      double output = kp * error + ITerm- kd * dInput;
-      
-	  if(output > outMax) output = outMax;
-      else if(output < outMin) output = outMin;
-	  *myOutput = output;
-	  
-      /*Remember some variables for next time*/
-      lastInput = input;
-      lastTime = now;
-   }
+	if(!inAuto) return;
+	unsigned long now = millis();
+	unsigned long timeChange = (now - lastTime);
+	if(timeChange>=SampleTime)
+	{
+		/*Compute all the working error variables*/
+		double input = *myInput;
+		
+		// dither input value to smooth quantization error
+		if ( dither > 0.0 )
+		{
+		  // generate random number from triangular probability density function 
+		  // centred on 0 and with range (-dither, dither)
+		  d = ( ( random( 1, 65535 ) + random( 1, 65535 ) ) / 65536.0 - 1.0 ) * dither;
+		  refVal += d;
+		}
+	  		
+		double error = *mySetpoint - input;
+		ITerm+= (ki * error);
+		if(ITerm > outMax) ITerm= outMax;
+		else if(ITerm < outMin) ITerm= outMin;
+		double dInput = (input - lastInput);
+		
+		/*Compute PID Output*/
+		double output = kp * error + ITerm- kd * dInput;
+		
+		if(output > outMax) output = outMax;
+		else if(output < outMin) output = outMin;
+		*myOutput = output;
+		
+		/*Remember some variables for next time*/
+		lastInput = input;
+		lastTime = now;
+	}
 }
 
 
@@ -78,21 +89,21 @@ void PID::Compute()
  ******************************************************************************/ 
 void PID::SetTunings(double Kp, double Ki, double Kd)
 {
-   if (Kp<0 || Ki<0 || Kd<0) return;
- 
-   dispKp = Kp; dispKi = Ki; dispKd = Kd;
-   
-   double SampleTimeInSec = ((double)SampleTime)/1000;  
-   kp = Kp;
-   ki = Ki * SampleTimeInSec;
-   kd = Kd / SampleTimeInSec;
- 
-  if(controllerDirection ==REVERSE)
-   {
-      kp = (0 - kp);
-      ki = (0 - ki);
-      kd = (0 - kd);
-   }
+	if (Kp<0 || Ki<0 || Kd<0) return;
+	
+	dispKp = Kp; dispKi = Ki; dispKd = Kd;
+	
+	double SampleTimeInSec = ((double)SampleTime)/1000;  
+	kp = Kp;
+	ki = Ki * SampleTimeInSec;
+	kd = Kd / SampleTimeInSec;
+	
+	if(controllerDirection ==REVERSE)
+	{
+		kp = (0 - kp);
+		ki = (0 - ki);
+		kd = (0 - kd);
+	}
 }
   
 /* SetSampleTime(...) *********************************************************
@@ -100,14 +111,14 @@ void PID::SetTunings(double Kp, double Ki, double Kd)
  ******************************************************************************/
 void PID::SetSampleTime(int NewSampleTime)
 {
-   if (NewSampleTime > 0)
-   {
-      double ratio  = (double)NewSampleTime
-                      / (double)SampleTime;
-      ki *= ratio;
-      kd /= ratio;
-      SampleTime = (unsigned long)NewSampleTime;
-   }
+	if (NewSampleTime > 0)
+	{
+		double ratio  = (double)NewSampleTime
+		              / (double)SampleTime;
+		ki *= ratio;
+		kd /= ratio;
+		SampleTime = (unsigned long)NewSampleTime;
+	}
 }
  
 /* SetOutputLimits(...)****************************************************
@@ -120,18 +131,18 @@ void PID::SetSampleTime(int NewSampleTime)
  **************************************************************************/
 void PID::SetOutputLimits(double Min, double Max)
 {
-   if(Min >= Max) return;
-   outMin = Min;
-   outMax = Max;
- 
-   if(inAuto)
-   {
-	   if(*myOutput > outMax) *myOutput = outMax;
-	   else if(*myOutput < outMin) *myOutput = outMin;
-	 
-	   if(ITerm > outMax) ITerm= outMax;
-	   else if(ITerm < outMin) ITerm= outMin;
-   }
+	if(Min >= Max) return;
+	outMin = Min;
+	outMax = Max;
+	
+	if(inAuto)
+	{
+		if(*myOutput > outMax) *myOutput = outMax;
+		else if(*myOutput < outMin) *myOutput = outMin;
+		
+		if(ITerm > outMax) ITerm= outMax;
+		else if(ITerm < outMin) ITerm= outMin;
+	}
 }
 
 /* SetMode(...)****************************************************************
@@ -141,12 +152,12 @@ void PID::SetOutputLimits(double Min, double Max)
  ******************************************************************************/ 
 void PID::SetMode(int Mode)
 {
-    bool newAuto = (Mode == AUTOMATIC);
-    if(newAuto == !inAuto)
-    {  /*we just went from manual to auto*/
-        PID::Initialize();
-    }
-    inAuto = newAuto;
+	bool newAuto = (Mode == AUTOMATIC);
+	if(newAuto == !inAuto)
+	{  /*we just went from manual to auto*/
+		PID::Initialize();
+	}
+	inAuto = newAuto;
 }
  
 /* Initialize()****************************************************************
@@ -155,10 +166,10 @@ void PID::SetMode(int Mode)
  ******************************************************************************/ 
 void PID::Initialize()
 {
-   ITerm = *myOutput;
-   lastInput = *myInput;
-   if(ITerm > outMax) ITerm = outMax;
-   else if(ITerm < outMin) ITerm = outMin;
+	ITerm = *myOutput;
+	lastInput = *myInput;
+	if(ITerm > outMax) ITerm = outMax;
+	else if(ITerm < outMin) ITerm = outMin;
 }
 
 /* SetControllerDirection(...)*************************************************
@@ -169,14 +180,23 @@ void PID::Initialize()
  ******************************************************************************/
 void PID::SetControllerDirection(int Direction)
 {
-   if(inAuto && Direction !=controllerDirection)
-   {
-	  kp = (0 - kp);
-      ki = (0 - ki);
-      kd = (0 - kd);
-   }   
-   controllerDirection = Direction;
+	if(inAuto && Direction !=controllerDirection)
+	{
+		kp = (0 - kp);
+		ki = (0 - ki);
+		kd = (0 - kd);
+	}   
+	controllerDirection = Direction;
 }
+
+/* SetDither(...)**************************************************************
+ * Set range of dither on input to smooth over quantization error.
+ * Set to the smallest step value in the range of the input.
+ ******************************************************************************/
+void PID::SetDither(double newDither)
+{
+	dither = newDither;
+}	
 
 /* Status Funcions*************************************************************
  * Just because you set the Kp=-1 doesn't mean it actually happened.  these
@@ -188,4 +208,4 @@ double PID::GetKi(){ return  dispKi;}
 double PID::GetKd(){ return  dispKd;}
 int PID::GetMode(){ return  inAuto ? AUTOMATIC : MANUAL;}
 int PID::GetDirection(){ return controllerDirection;}
-
+double PID::GetDither(){ return dither;}
