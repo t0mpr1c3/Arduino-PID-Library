@@ -4,17 +4,15 @@
 
 class PID
 {
-	
-	
-	public:
-	
+  public:
+
 	//Constants used in some of the functions below
 	#define AUTOMATIC	1
 	#define MANUAL	0
 	#define DIRECT  0
 	#define REVERSE  1
 	
-  //commonly used functions **************************************************************************
+	//commonly used functions **************************************************************************
 	PID(double*, double*, double*,        // * constructor.  links the PID to the Input, Output, and 
 	double, double, double, int);     //   Setpoint.  Initial tuning parameters are also set here
 	
@@ -42,8 +40,7 @@ class PID
 	void SetSampleTime(int);              // * sets the frequency, in Milliseconds, with which 
 	                                  //   the PID calculation is performed.  default is 100
 	void SetDither(double);               // * sets the range of the dither 										  
-                                          
-										  
+	void SetMaxKd(double);                // * sets the maximum derivative gain 										  
 										  
 										  
   //Display functions ****************************************************************
@@ -53,7 +50,8 @@ class PID
 	int GetMode();						  //  inside the PID.
 	int GetDirection();					  //
 	double GetDither();                   // 
-
+	double GetMaxKd();                    // 
+	
   private:
 	void Initialize();
 	
@@ -73,13 +71,17 @@ class PID
 	                          //   what these values are.  with pointers we'll just know.
 			  
 	unsigned long lastTime;
-	double ITerm, lastInput;
+	double ITerm, DTerm, lastInput;
 
 	int SampleTime;
 	double outMin, outMax;
 	bool inAuto;
 	
-	double dither, d;			// * noise added to input to smooth quantization errors, set to smallest step value in input range	
+	double dither, d;			// * Noise added to input to smooth quantization errors.
+							//   Set to smallest step value in input range.
+	
+	double maxKd;				// * Maximum derivative gain. 
+								//   Set to 10-20 to avoid applying derivation to high frequency measurement noise.
 };
 #endif
 
