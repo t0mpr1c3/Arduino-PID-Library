@@ -6,9 +6,9 @@
  **********************************************************************************************/
 
 #if ARDUINO >= 100
-  #include "Arduino.h"
+	#include "Arduino.h"
 #else
-  #include "WProgram.h"
+	#include "WProgram.h"
 #endif
 
 #include <PID_v1.h>
@@ -24,17 +24,18 @@ PID::PID(double* Input, double* Output, double* Setpoint,
 												//the arduino pwm limits
 
 	SampleTime = 100;							//default Controller Sample Time is 0.1 seconds
-	
+
 	PID::SetControllerDirection(ControllerDirection);
 	PID::SetTunings(Kp, Ki, Kd);
-	
+
 	lastTime = millis()-SampleTime;				
 	inAuto = false;
 	myOutput = Output;
 	myInput = Input;
 	mySetpoint = Setpoint;
-	dither = 0;
+	dither = 0;	
 	randomSeed( 0 );
+	maxKd = 0;
 }
  
  
@@ -52,7 +53,7 @@ void PID::Compute()
 	{
 		/*Compute all the working error variables*/
 		double input = *myInput;
-		
+	  
 		// dither input value to smooth quantization error
 		if ( dither > 0.0 )
 		{
@@ -61,20 +62,21 @@ void PID::Compute()
 		  d = ( ( random( 1, 65535 ) + random( 1, 65535 ) ) / 65536.0 - 1.0 ) * dither;
 		  refVal += d;
 		}
-	  		
+	  
 		double error = *mySetpoint - input;
-		ITerm+= (ki * error);
-		if(ITerm > outMax) ITerm= outMax;
-		else if(ITerm < outMin) ITerm= outMin;
+		ITerm += (ki * error);
+		if(ITerm > outMax) ITerm = outMax;
+		else if(ITerm < outMin) ITerm = outMin;
+		
 		double dInput = (input - lastInput);
-		
+
 		/*Compute PID Output*/
-		double output = kp * error + ITerm- kd * dInput;
-		
+		double output = kp * error + ITerm - ( kd / ( 1 + kd / maxKd ) ) * dInput;
+
 		if(output > outMax) output = outMax;
 		else if(output < outMin) output = outMin;
 		*myOutput = output;
-		
+
 		/*Remember some variables for next time*/
 		lastInput = input;
 		lastTime = now;
@@ -90,15 +92,15 @@ void PID::Compute()
 void PID::SetTunings(double Kp, double Ki, double Kd)
 {
 	if (Kp<0 || Ki<0 || Kd<0) return;
-	
+
 	dispKp = Kp; dispKi = Ki; dispKd = Kd;
-	
-	double SampleTimeInSec = ((double)SampleTime)/1000;  
+
+	double SampleTimeInSec = ( (double) SampleTime ) / 1000;  
 	kp = Kp;
 	ki = Ki * SampleTimeInSec;
 	kd = Kd / SampleTimeInSec;
-	
-	if(controllerDirection ==REVERSE)
+
+	if(controllerDirection == REVERSE)
 	{
 		kp = (0 - kp);
 		ki = (0 - ki);
@@ -113,11 +115,10 @@ void PID::SetSampleTime(int NewSampleTime)
 {
 	if (NewSampleTime > 0)
 	{
-		double ratio  = (double)NewSampleTime
-		              / (double)SampleTime;
+		double ratio  = (double) NewSampleTime / (double) SampleTime;
 		ki *= ratio;
 		kd /= ratio;
-		SampleTime = (unsigned long)NewSampleTime;
+		SampleTime = (unsigned long) NewSampleTime;
 	}
 }
  
@@ -134,12 +135,12 @@ void PID::SetOutputLimits(double Min, double Max)
 	if(Min >= Max) return;
 	outMin = Min;
 	outMax = Max;
-	
+
 	if(inAuto)
 	{
 		if(*myOutput > outMax) *myOutput = outMax;
 		else if(*myOutput < outMin) *myOutput = outMin;
-		
+
 		if(ITerm > outMax) ITerm= outMax;
 		else if(ITerm < outMin) ITerm= outMin;
 	}
@@ -198,7 +199,16 @@ void PID::SetDither(double newDither)
 	dither = newDither;
 }	
 
-/* Status Funcions*************************************************************
+/* SetMaxKd(...)**************************************************************
+ * Set maximum derivative gain
+ * Default 0 means no maximum.
+ ******************************************************************************/
+void PID::SetMaxKd(double newMaxKd)
+{
+	maxKd = newMaxKd;
+}	
+
+/* Status Functions************************************************************
  * Just because you set the Kp=-1 doesn't mean it actually happened.  these
  * functions query the internal state of the PID.  they're here for display 
  * purposes.  this are the functions the PID Front-end uses for example
@@ -209,3 +219,4 @@ double PID::GetKd(){ return  dispKd;}
 int PID::GetMode(){ return  inAuto ? AUTOMATIC : MANUAL;}
 int PID::GetDirection(){ return controllerDirection;}
 double PID::GetDither(){ return dither;}
+double PID::GetMaxKd(){ return maxKd;}
