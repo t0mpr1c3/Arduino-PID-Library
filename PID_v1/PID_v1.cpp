@@ -26,7 +26,6 @@ double Kp, double Ki, double Kd, enum Direction ControllerDirection)
   //default output limit corresponds to 
   //the arduino pwm limits
   PID::SetOutputLimits(0, 255);			
-
   //default Controller Sample Time is 0.1 seconds
   SampleTime = 100;							
 
@@ -42,22 +41,24 @@ double Kp, double Ki, double Kd, enum Direction ControllerDirection)
   MaxKd = 10.0;
 }
 
-
 /* Compute() **********************************************************************
- *     This, as they say, is where the magic happens.  this function should be called
+ *   This, as they say, is where the magic happens.  this function should be called
  *   every time "void loop()" executes.  the function will decide for itself whether a new
- *   pid Output needs to be computed
- **********************************************************************************/
-void PID::Compute()
+ *   pid Output needs to be computed.  returns true when the output is computed,
+ *   false when nothing has been done.
+ **********************************************************************************/ 
+bool PID::Compute()
 {
-  if(!inAuto) return;
+  if (!inAuto) 
+  {
+    return false;
+  }
   unsigned long now = millis();
   unsigned long timeChange = (now - lastTime);
-  if(timeChange>=SampleTime)
+  if (timeChange >= SampleTime)
   {
     /*Compute all the working error variables*/
     double input = *myInput;
-
 
     // dither input value to smooth quantization error
     if ( Dither > 0.0 )
@@ -83,9 +84,13 @@ void PID::Compute()
     /*Remember some variables for next time*/
     lastInput = input;
     lastTime = now;
+    return true;
+  }
+  else 
+  {
+    return false;
   }
 }
-
 
 /* SetTunings(...)*************************************************************
  * This function allows the controller's dynamic performance to be adjusted. 
@@ -94,18 +99,21 @@ void PID::Compute()
  ******************************************************************************/
 void PID::SetTunings(double Kp, double Ki, double Kd)
 {
-  if (Kp<0.0 || Ki<0.0 || Kd<0.0) return;
+  if ((Kp < 0.0) || (Ki < 0.0) || (Kd < 0.0)) 
+  {
+    return;
+  }
 
   dispKp = Kp; 
   dispKi = Ki; 
   dispKd = Kd;
 
-  double SampleTimeInSec = ((double)SampleTime)/1000.0;  
+  double SampleTimeInSec = ((double) SampleTime) / 1000.0;  
   kp = Kp;
   ki = Ki * SampleTimeInSec;
   kd = Kd / SampleTimeInSec;
 
-  if(controllerDirection ==REVERSE)
+  if (controllerDirection == REVERSE)
   {
     kp = (0.0 - kp);
     ki = (0.0 - ki);
@@ -120,11 +128,10 @@ void PID::SetSampleTime(int NewSampleTime)
 {
   if (NewSampleTime > 0)
   {
-    double ratio  = (double)NewSampleTime
-      / (double)SampleTime;
+    double ratio = (double) NewSampleTime / (double) SampleTime;
     ki *= ratio;
     kd /= ratio;
-    SampleTime = (unsigned long)NewSampleTime;
+    SampleTime = (unsigned long)i NewSampleTime;
   }
 }
 
@@ -138,11 +145,14 @@ void PID::SetSampleTime(int NewSampleTime)
  **************************************************************************/
 void PID::SetOutputLimits(double Min, double Max)
 {
-  if(Min >= Max) return;
+  if (Min >= Max) 
+  {
+    return;
+  }
   outMin = Min;
   outMax = Max;
 
-  if(inAuto)
+  if (inAuto)
   {
     *myOutput = BOUND( *myOutput, outMin, outMax );
     ITerm = BOUND( ITerm, outMin, outMax );
@@ -157,7 +167,7 @@ void PID::SetOutputLimits(double Min, double Max)
 void PID::SetMode(enum Mode Mode)
 {
   bool newAuto = (Mode == AUTOMATIC);
-  if(newAuto == !inAuto)
+  if (newAuto == !inAuto)
   {  /*we just went from manual to auto*/
     PID::Initialize();
   }
@@ -165,7 +175,7 @@ void PID::SetMode(enum Mode Mode)
 }
 
 /* Initialize()****************************************************************
- *	does all the things that need to happen to ensure a bumpless transfer
+ *  does all the things that need to happen to ensure a bumpless transfer
  *  from manual to automatic mode.
  ******************************************************************************/
 void PID::Initialize()
@@ -183,7 +193,7 @@ void PID::Initialize()
  ******************************************************************************/
 void PID::SetControllerDirection(enum Direction Direction)
 {
-  if(inAuto && Direction !=controllerDirection)
+  if (inAuto && (Direction != controllerDirection))
   {
     kp = (0.0 - kp);
     ki = (0.0 - ki);
@@ -223,31 +233,42 @@ void PID::SetMaxKd( double newMaxKd )
  * functions query the internal state of the PID.  they're here for display 
  * purposes.  this are the functions the PID Front-end uses for example
  ******************************************************************************/
-double PID::GetKp(){ 
+double PID::GetKp()
+{ 
   return  dispKp; 
 }
-double PID::GetKi(){ 
+
+double PID::GetKi()
+{ 
   return  dispKi; 
 }
-double PID::GetKd(){ 
+
+double PID::GetKd()
+{ 
   return  dispKd; 
 }
-enum Mode PID::GetMode(){ 
+
+enum Mode PID::GetMode()
+{ 
   return  inAuto ? AUTOMATIC : MANUAL; 
 }
-enum Direction PID::GetDirection(){ 
+
+enum Direction PID::GetDirection()
+{ 
   return controllerDirection; 
 }
-double PID::GetPTerm(){ 
+
+double PID::GetPTerm()
+{ 
   return  PTerm; 
 }
-double PID::GetITerm(){ 
+
+double PID::GetITerm()
+{ 
   return  ITerm; 
 }
-double PID::GetDTerm(){ 
+
+double PID::GetDTerm()
+{ 
   return  DTerm; 
 }
-
-
-
-
