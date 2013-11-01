@@ -13,20 +13,19 @@
 
 #include "PID_v1.h"
 
-#define BOUND( n, a, b ) min( max( (n), (a) ), (b) ) // NAN -> min
-
 
 /*Constructor (...)*********************************************************
  *    The parameters specified here are those for for which we can't set up 
  *    reliable defaults, so we need to have the user set them.
  ***************************************************************************/
 PID::PID(double* Input, double* Output, double* Setpoint,
-double Kp, double Ki, double Kd, enum Direction ControllerDirection)
+  double Kp, double Ki, double Kd, byte ControllerDirection)
 {
-  //default output limit corresponds to 
-  //the arduino pwm limits
+  // default output limit corresponds to 
+  // the arduino pwm limits
   PID::SetOutputLimits(0, 255);			
-  //default Controller Sample Time is 0.1 seconds
+
+  // default Controller Sample Time is 0.1 seconds
   SampleTime = 100;							
 
   PID::SetControllerDirection(ControllerDirection);
@@ -37,7 +36,6 @@ double Kp, double Ki, double Kd, enum Direction ControllerDirection)
   myOutput = Output;
   myInput = Input;
   mySetpoint = Setpoint;
-  Dither = 0.0;
   MaxKd = 10.0;
 }
 
@@ -57,31 +55,24 @@ bool PID::Compute()
   unsigned long timeChange = (now - lastTime);
   if (timeChange >= SampleTime)
   {
-    /*Compute all the working error variables*/
+    // compute all the working error variables
     double input = *myInput;
 
-    // dither input value to smooth quantization error
-    if ( Dither > 0.0 )
-    {
-      // add random noise from triangular probability density function 
-      // centred on 0 and with range (-Dither, Dither)
-      input += ( random( -Dither, Dither ) + random( -Dither, Dither ) ) / 2.0;
-    }
-
-    /*compute pid_t Output*/
+    // compute pid_t Output
     double error = *mySetpoint - input;
     double dInput = (input - lastInput);
 
     PTerm = kp * error; 
     ITerm += ( ki * error );
-    ITerm = BOUND( ITerm, outMin, outMax );
-    DTerm = - kd * dInput / ( MaxKd < MAX_KD_MIN ? 1.0 : 1.0 + kd / MaxKd );	
+    ITerm = Limit(&ITerm);
+    DTerm = - kd * dInput / ((MaxKd < MAX_KD_MIN) ? 1.0 : 1.0 + kd / MaxKd);	
 
-    /*Compute PID Output*/
-    double output = BOUND( PTerm + ITerm + DTerm, outMin, outMax );
+    // compute PID Output
+    double output = PTerm + ITerm + DTerm;
+    Limit(&output);
     *myOutput = output;
 
-    /*Remember some variables for next time*/
+    // remember some variables for next time
     lastInput = input;
     lastTime = now;
     return true;
@@ -89,6 +80,21 @@ bool PID::Compute()
   else 
   {
     return false;
+  }
+}
+
+/* Limit(...)******************************************************************
+ *  Applies outMin and outMax limits to the supplied variable
+ ******************************************************************************/
+void PID::Limit(double *var)
+{
+  if (*var > outMax)
+  {
+    *var = outMax;
+  }
+  else if (*var < outMin)
+  {
+    *var = outMin;
   }
 }
 
@@ -131,7 +137,7 @@ void PID::SetSampleTime(int NewSampleTime)
     double ratio = (double) NewSampleTime / (double) SampleTime;
     ki *= ratio;
     kd /= ratio;
-    SampleTime = (unsigned long)i NewSampleTime;
+    SampleTime = (unsigned long) NewSampleTime;
   }
 }
 
@@ -154,8 +160,8 @@ void PID::SetOutputLimits(double Min, double Max)
 
   if (inAuto)
   {
-    *myOutput = BOUND( *myOutput, outMin, outMax );
-    ITerm = BOUND( ITerm, outMin, outMax );
+    Limit(myOutput);
+    Limit(&ITerm);
   }
 }
 
@@ -164,7 +170,7 @@ void PID::SetOutputLimits(double Min, double Max)
  * when the transition from manual to auto occurs, the controller is
  * automatically initialized
  ******************************************************************************/
-void PID::SetMode(enum Mode Mode)
+void PID::SetMode(byte Mode)
 {
   bool newAuto = (Mode == AUTOMATIC);
   if (newAuto == !inAuto)
@@ -182,7 +188,7 @@ void PID::Initialize()
 {
   ITerm = *myOutput;
   lastInput = *myInput;
-  ITerm = BOUND( ITerm, outMin, outMax );
+  ITerm = Limit(&Iterm);
 }
 
 /* SetControllerDirection(...)*************************************************
@@ -191,7 +197,7 @@ void PID::Initialize()
  * know which one, because otherwise we may increase the output when we should
  * be decreasing.  This is called from the constructor.
  ******************************************************************************/
-void PID::SetControllerDirection(enum Direction Direction)
+void PID::SetControllerDirection(byte Direction)
 {
   if (inAuto && (Direction != controllerDirection))
   {
@@ -201,18 +207,6 @@ void PID::SetControllerDirection(enum Direction Direction)
   }   
   controllerDirection = Direction;
 }
-
-/* SetDither(...)**************************************************************
- * set range of dither on input to smooth over quantization error.
- * set to the smallest step value in the range of the input.
- ******************************************************************************/
-void PID::SetDither( double NewDither )
-{
-  if ( NewDither >= 0.0 )
-  {
-    Dither = NewDither;
-  }
-}	
 
 /* pid_set_max_Kd(...)*********************************************************
  * set maximum derivative gain
@@ -248,12 +242,12 @@ double PID::GetKd()
   return  dispKd; 
 }
 
-enum Mode PID::GetMode()
+byte PID::GetMode()
 { 
   return  inAuto ? AUTOMATIC : MANUAL; 
 }
 
-enum Direction PID::GetDirection()
+byte PID::GetDirection()
 { 
   return controllerDirection; 
 }
