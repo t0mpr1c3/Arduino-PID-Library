@@ -5,14 +5,7 @@
  * This Library is licensed under a GPLv3 License
  **********************************************************************************************/
 
-#if ARDUINO >= 100
-#include "Arduino.h"
-#else
-#include "WProgram.h"
-#endif
-
 #include "PID_v1.h"
-
 
 /*Constructor (...)*********************************************************
  *    The parameters specified here are those for for which we can't set up 
@@ -21,18 +14,18 @@
 PID::PID(double* Input, double* Output, double* Setpoint,
   double Kp, double Ki, double Kd, byte ControllerDirection)
 {
-  // default output limit corresponds to 
-  // the arduino pwm limits
+  //default output limit corresponds to 
+  //the arduino pwm limits
   PID::SetOutputLimits(0, 255);			
 
-  // default Controller Sample Time is 0.1 seconds
+  //default Controller Sample Time is 0.1 seconds
   SampleTime = 100;							
 
   PID::SetControllerDirection(ControllerDirection);
   PID::SetTunings(Kp, Ki, Kd);
 
-  lastTime = millis()-SampleTime;				
-  inAuto = false;
+  lastTime = millis() - SampleTime;				
+  mode = MANUAL;
   myOutput = Output;
   myInput = Input;
   mySetpoint = Setpoint;
@@ -47,7 +40,7 @@ PID::PID(double* Input, double* Output, double* Setpoint,
  **********************************************************************************/ 
 bool PID::Compute()
 {
-  if (!inAuto) 
+  if (mode == MANUAL) 
   {
     return false;
   }
@@ -64,8 +57,8 @@ bool PID::Compute()
 
     PTerm = kp * error; 
     ITerm += ( ki * error );
-    ITerm = Limit(&ITerm);
-    DTerm = - kd * dInput / ((MaxKd < MAX_KD_MIN) ? 1.0 : 1.0 + kd / MaxKd);	
+    Limit(&ITerm);
+    DTerm = - kd * dInput / ( MaxKd < MAX_KD_MIN ? 1.0 : 1.0 + kd / MaxKd );	
 
     // compute PID Output
     double output = PTerm + ITerm + DTerm;
@@ -84,17 +77,17 @@ bool PID::Compute()
 }
 
 /* Limit(...)******************************************************************
- *  Applies outMin and outMax limits to the supplied variable
+ * bound supplied variable to (outMin, outMax)
  ******************************************************************************/
 void PID::Limit(double *var)
 {
-  if (*var > outMax)
-  {
-    *var = outMax;
-  }
-  else if (*var < outMin)
+  if (*var < outMin)
   {
     *var = outMin;
+  }
+  else if (*var > outMax)
+  {
+    *var = outMax;
   }
 }
 
@@ -149,16 +142,16 @@ void PID::SetSampleTime(int NewSampleTime)
  *  want to clamp it from 0-125.  who knows.  at any rate, that can all be done
  *  here.
  **************************************************************************/
-void PID::SetOutputLimits(double Min, double Max)
+void PID::SetOutputLimits(double newMin, double newMax)
 {
-  if (Min >= Max) 
+  if (newMin >= newMax) 
   {
     return;
   }
-  outMin = Min;
-  outMax = Max;
+  outMin = newMin;
+  outMax = newMax;
 
-  if (inAuto)
+  if (mode == AUTOMATIC)
   {
     Limit(myOutput);
     Limit(&ITerm);
@@ -170,14 +163,14 @@ void PID::SetOutputLimits(double Min, double Max)
  * when the transition from manual to auto occurs, the controller is
  * automatically initialized
  ******************************************************************************/
-void PID::SetMode(byte Mode)
+void PID::SetMode(byte newMode)
 {
-  bool newAuto = (Mode == AUTOMATIC);
-  if (newAuto == !inAuto)
-  {  /*we just went from manual to auto*/
+  if (newMode != mode)
+  {
+    // just changed mode
     PID::Initialize();
+    mode = newMode;
   }
-  inAuto = newAuto;
 }
 
 /* Initialize()****************************************************************
@@ -188,7 +181,7 @@ void PID::Initialize()
 {
   ITerm = *myOutput;
   lastInput = *myInput;
-  ITerm = Limit(&Iterm);
+  Limit(&ITerm);
 }
 
 /* SetControllerDirection(...)*************************************************
@@ -197,15 +190,15 @@ void PID::Initialize()
  * know which one, because otherwise we may increase the output when we should
  * be decreasing.  This is called from the constructor.
  ******************************************************************************/
-void PID::SetControllerDirection(byte Direction)
+void PID::SetControllerDirection(byte newDirection)
 {
-  if (inAuto && (Direction != controllerDirection))
+  if ((mode == AUTOMATIC) && (newDirection != controllerDirection))
   {
     kp = (0.0 - kp);
     ki = (0.0 - ki);
     kd = (0.0 - kd);
   }   
-  controllerDirection = Direction;
+  controllerDirection = newDirection;
 }
 
 /* pid_set_max_Kd(...)*********************************************************
@@ -244,7 +237,7 @@ double PID::GetKd()
 
 byte PID::GetMode()
 { 
-  return  inAuto ? AUTOMATIC : MANUAL; 
+  return mode;
 }
 
 byte PID::GetDirection()
@@ -266,3 +259,4 @@ double PID::GetDTerm()
 { 
   return  DTerm; 
 }
+
